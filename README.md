@@ -1,6 +1,6 @@
-# SystemG
+# SystemG (System Generic)
 
-systemd-compatible interfaces on top of real, swappable Unix tools, written
+SystemG, short for System Generic: systemd-compatible interfaces on top of real, swappable Unix tools, written
 in Rust. Software that expects systemd keeps working, while dinit and
 friends do the actual work.
 
