@@ -1,0 +1,9 @@
+[package]
+name = "compatd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+unitparse = { path = "../unitparse" }
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }

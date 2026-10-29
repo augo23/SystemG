@@ -1,0 +1,15 @@
+[package]
+name = "systemctl"
+description = "systemctl-compatible CLI that drives SystemG backends"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "systemctl"
+path = "src/main.rs"
+
+[dependencies]
+sg-core = { path = "../sg-core" }
+sg-dinit = { path = "../sg-dinit" }
+unitparse = { path = "../unitparse" }

@@ -1,0 +1,10 @@
+[package]
+name = "libsd-shim"
+description = "Drop-in libsystemd.so: sd_notify, sd_listen_fds, sd_booted backed by SystemG"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "systemd"
+crate-type = ["cdylib", "rlib"]

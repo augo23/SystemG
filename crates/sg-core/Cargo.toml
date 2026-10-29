@@ -1,0 +1,6 @@
+[package]
+name = "sg-core"
+description = "Backend traits shared by every SystemG component"
+version.workspace = true
+edition.workspace = true
+license.workspace = true

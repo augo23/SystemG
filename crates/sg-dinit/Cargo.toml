@@ -1,0 +1,10 @@
+[package]
+name = "sg-dinit"
+description = "dinit backend: unit translation and service control via dinitctl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sg-core = { path = "../sg-core" }
+unitparse = { path = "../unitparse" }

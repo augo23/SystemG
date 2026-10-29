@@ -1,0 +1,10 @@
+[package]
+name = "sg-notify-proxy"
+description = "Bridges systemd's NOTIFY_SOCKET readiness protocol to dinit's readiness pipe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "sg-notify-proxy"
+path = "src/main.rs"
