@@ -231,6 +231,9 @@ impl Unit {
         search_path: &[PathBuf],
         spec: &Specifiers,
     ) -> Result<Option<Self>, LoadError> {
+        if !is_valid_unit_name(name) {
+            return Ok(None);
+        }
         let Some(main) = search_path
             .iter()
             .map(|d| d.join(name))
@@ -534,6 +537,24 @@ pub fn split_quoted(s: &str) -> Option<Vec<String>> {
     Some(out)
 }
 
+/// systemd's unit name rules (`unit_name_is_valid`): `<prefix>.<type>`, at most
+/// 255 bytes, only `[A-Za-z0-9:_.\\@-]`, the prefix not starting with `.`. So a
+/// name is always one file name: never `/`, `..` or empty, and a unit name
+/// joined onto a directory stays in it.
+pub fn is_valid_unit_name(name: &str) -> bool {
+    let Some((prefix, suffix)) = name.rsplit_once('.') else {
+        return false;
+    };
+    name.len() <= 255
+        && !prefix.is_empty()
+        && !prefix.starts_with('.')
+        && !suffix.is_empty()
+        && suffix.bytes().all(|b| b.is_ascii_lowercase())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b":_.\\@-".contains(&b))
+}
+
 /// Strip the unit type suffix: `nginx.service` -> `nginx`.
 pub fn base_name(unit: &str) -> &str {
     unit.rsplit_once('.').map(|(b, _)| b).unwrap_or(unit)
@@ -542,6 +563,29 @@ pub fn base_name(unit: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unit_names() {
+        for ok in ["nginx.service", "getty@tty1.service", "multi-user.target", "dev-sda1.device", "a\\x2d.mount", "x.socket"] {
+            assert!(is_valid_unit_name(ok), "{ok}");
+        }
+        for bad in ["", "nginx", ".service", "..service", "../../etc/passwd.service", "/etc/x.service",
+                    "a/b.service", "a.", "a.Service", "a b.service", "a.service/..", "a\0.service"] {
+            assert!(!is_valid_unit_name(bad), "{bad:?}");
+        }
+        assert!(!is_valid_unit_name(&format!("{}.service", "a".repeat(250))));
+    }
+
+    #[test]
+    fn load_refuses_invalid_names() {
+        let d = std::env::temp_dir().join(format!("unitparse-trav-{}", std::process::id()));
+        let inner = d.join("units");
+        fs::create_dir_all(&inner).unwrap();
+        fs::write(d.join("outside.service"), "[Service]\nExecStart=/bin/true\n").unwrap();
+        let r = Unit::load("../outside.service", &[inner]);
+        fs::remove_dir_all(&d).unwrap();
+        assert!(matches!(r, Ok(None)));
+    }
 
     const NGINX: &str = r#"
 [Unit]

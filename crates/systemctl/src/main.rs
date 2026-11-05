@@ -7,7 +7,7 @@ use sg_core::{ActiveState, Error, ServiceManager};
 use sg_dinit::{generate_with, map_target, Dinit, Specifiers};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use unitparse::{system_search_path, Unit};
+use unitparse::{is_valid_unit_name, system_search_path, Unit};
 
 mod preset;
 
@@ -160,16 +160,31 @@ fn ids() -> (u32, u32) {
 /// (a symlink shipped by the package), `display-manager` -> the enabled
 /// display manager, or any unit's `[Install] Alias=`.
 fn resolve(ctx: &Ctx, arg: &str) -> (String, String) {
-    let mut unit = if arg.contains('.') {
-        arg.to_string()
-    } else {
-        format!("{arg}.service")
-    };
+    let mut unit = resolve_name(arg);
     if let Some(real) = alias_target(&ctx.search_path, &unit) {
         unit = real;
     }
     let svc = map_target(&unit);
     (unit, svc)
+}
+
+/// `nginx` -> `nginx.service`; a name with a type stays as it is.
+fn resolve_name(arg: &str) -> String {
+    if arg.contains('.') {
+        arg.to_string()
+    } else {
+        format!("{arg}.service")
+    }
+}
+
+/// An error for a unit name (from the command line or a unit file's
+/// `WantedBy=`/`Alias=`) that is not a single valid unit file name.
+fn check_name(name: &str) -> std::io::Result<()> {
+    if is_valid_unit_name(name) {
+        Ok(())
+    } else {
+        Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("invalid unit name {name:?}")))
+    }
 }
 
 /// The unit an alias name points to, if `name` is an alias.
@@ -282,6 +297,18 @@ fn main() -> ExitCode {
     if needs_unit && units.is_empty() {
         eprintln!("Too few arguments.");
         return ExitCode::from(1);
+    }
+    // Unit arguments become file names under the unit and config directories:
+    // refuse anything that is not one (`../x`, `/etc/x`), as systemd does.
+    let takes_units = !matches!(
+        cmd.as_str(),
+        "import-environment" | "set-environment" | "unset-environment" | "list-units" | "preset-all"
+    );
+    if takes_units {
+        if let Some(bad) = units.iter().find(|u| !is_valid_unit_name(&resolve_name(u))) {
+            eprintln!("Invalid unit name \"{bad}\" escaped as \"{bad}\" (maybe you should use systemd-escape?)");
+            return ExitCode::from(1);
+        }
     }
     match cmd.as_str() {
         "start" => each(&ctx, units, |c, _, s| c.dinit.start(s)),
@@ -524,7 +551,9 @@ fn enable(ctx: &Ctx, units: &[String], on: bool) -> ExitCode {
         if let (Some(path), Some(config)) = (&unit_path, ctx.search_path.first()) {
             for a in &aliases {
                 let link = config.join(a);
-                let r = if on {
+                let r = if let Err(e) = check_name(a) {
+                    Err(e)
+                } else if on {
                     if std::fs::symlink_metadata(&link).is_ok() {
                         Ok(())
                     } else {
@@ -760,6 +789,9 @@ fn global_search_path() -> Vec<PathBuf> {
 }
 
 fn find_unit(ctx: &Ctx, unit: &str) -> Result<Option<(PathBuf, Unit)>, unitparse::LoadError> {
+    if !is_valid_unit_name(unit) {
+        return Ok(None);
+    }
     let Some(path) = ctx
         .search_path
         .iter()
@@ -778,7 +810,9 @@ fn add_wants(
     unit: &str,
     path: &std::path::Path,
 ) -> std::io::Result<()> {
+    check_name(unit)?;
     for t in targets {
+        check_name(t)?;
         let dir = config.join(format!("{t}.wants"));
         std::fs::create_dir_all(&dir)?;
         let link = dir.join(unit);
@@ -790,6 +824,7 @@ fn add_wants(
 }
 
 fn remove_wants(config: &std::path::Path, unit: &str) -> std::io::Result<()> {
+    check_name(unit)?;
     let Ok(entries) = std::fs::read_dir(config) else {
         return Ok(());
     };

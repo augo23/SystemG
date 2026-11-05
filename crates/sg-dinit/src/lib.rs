@@ -945,6 +945,9 @@ pub fn dbus_activation(
             let (Some(name), Some(unit)) = (field("Name"), field("SystemdService")) else {
                 continue;
             };
+            if !unitparse::is_valid_unit_name(&unit) {
+                continue;
+            }
             let Some(svc) = dbus_unit_service(&unit, search_path) else { continue };
             if !dinit_dir.join(&svc).is_file() || svc.contains('/') || name.contains(' ') {
                 continue;
